@@ -1092,7 +1092,6 @@ fn publish_session_to_tmux_env(tmux_session_name: &str, instance_id: &str, sessi
 ///   `apply_acp_overlay_inplace` is the authority; see its docstring.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PassiveStatusPatch {
-    pub id: String,
     pub status: Status,
     pub idle_entered_at: Option<DateTime<Utc>>,
     /// `None` when the source `Instance` was never touched by a user
@@ -1110,7 +1109,6 @@ impl PassiveStatusPatch {
     /// contract is on [`Self::last_accessed_at`].
     pub(crate) fn from_instance(inst: &Instance) -> Self {
         Self {
-            id: inst.id.clone(),
             status: inst.status,
             idle_entered_at: inst.idle_entered_at,
             last_accessed_at: inst.last_accessed_at,
@@ -1444,7 +1442,7 @@ impl Instance {
     /// while `status` and `idle_entered_at` still apply unconditionally.
     /// Callers relying on the observable `last_accessed_at` change must
     /// re-read the field after `merge_passive_status_patch` returns.
-    pub(crate) fn merge_passive_status_patch(&mut self, patch: &PassiveStatusPatch) {
+    pub(crate) fn merge_passive_status_patch(&mut self, id: &str, patch: &PassiveStatusPatch) {
         self.status = patch.status;
         self.idle_entered_at = patch.idle_entered_at;
         let Some(incoming) = patch.last_accessed_at else {
@@ -1453,7 +1451,7 @@ impl Instance {
         if self.last_accessed_at.is_some_and(|disk| disk >= incoming) {
             tracing::debug!(
                 target: "session.store",
-                session_id = %patch.id,
+                session_id = %id,
                 disk_ts = ?self.last_accessed_at,
                 patch_ts = %incoming,
                 "dropped passive status patch's last_accessed_at as a no-op (disk value is at least as recent; status/idle_entered_at still applied)"
@@ -5924,12 +5922,11 @@ mod tests {
 
         let now = Utc::now();
         let patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: Some(now),
             last_accessed_at: Some(now),
         };
-        disk.merge_passive_status_patch(&patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
 
         assert_eq!(disk.status, Status::Idle);
         assert_eq!(disk.idle_entered_at, Some(now));
@@ -5954,12 +5951,11 @@ mod tests {
         disk.last_accessed_at = None;
 
         let patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: Some(Utc::now()),
             last_accessed_at: None,
         };
-        disk.merge_passive_status_patch(&patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
 
         assert_eq!(disk.status, Status::Idle, "status must still apply");
         assert_eq!(
@@ -5982,12 +5978,11 @@ mod tests {
         disk.idle_entered_at = None;
 
         let stale_patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: Some(peer_touch - chrono::Duration::minutes(5)),
             last_accessed_at: Some(peer_touch - chrono::Duration::minutes(5)),
         };
-        disk.merge_passive_status_patch(&stale_patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &stale_patch);
 
         assert_eq!(
             disk.status,
@@ -6013,12 +6008,11 @@ mod tests {
         disk.last_accessed_at = Some(ts);
 
         let patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: None,
             last_accessed_at: Some(ts),
         };
-        disk.merge_passive_status_patch(&patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
 
         // Guard is `>=`: equal timestamps are not a real advance, so the
         // patch's last_accessed_at is dropped. The observable value stays
@@ -6035,12 +6029,11 @@ mod tests {
 
         let newer = Utc::now();
         let patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: None,
             last_accessed_at: Some(newer),
         };
-        disk.merge_passive_status_patch(&patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
 
         assert_eq!(disk.last_accessed_at, Some(newer));
     }
@@ -6054,12 +6047,11 @@ mod tests {
 
         let ts = Utc::now();
         let patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: None,
             last_accessed_at: Some(ts),
         };
-        disk.merge_passive_status_patch(&patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
 
         assert_eq!(disk.last_accessed_at, Some(ts));
     }
@@ -6069,13 +6061,12 @@ mod tests {
         let mut disk = Instance::new("session", "/tmp/test");
         let ts = Utc::now();
         let patch = PassiveStatusPatch {
-            id: disk.id.clone(),
             status: Status::Idle,
             idle_entered_at: Some(ts),
             last_accessed_at: Some(ts),
         };
-        disk.merge_passive_status_patch(&patch);
-        disk.merge_passive_status_patch(&patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
+        disk.merge_passive_status_patch(&disk.id.clone(), &patch);
 
         assert_eq!(disk.status, Status::Idle);
         assert_eq!(disk.idle_entered_at, Some(ts));
@@ -6088,18 +6079,22 @@ mod tests {
         let t0 = Utc::now() - chrono::Duration::minutes(1);
         let t1 = Utc::now();
 
-        disk.merge_passive_status_patch(&PassiveStatusPatch {
-            id: disk.id.clone(),
-            status: Status::Running,
-            idle_entered_at: None,
-            last_accessed_at: Some(t0),
-        });
-        disk.merge_passive_status_patch(&PassiveStatusPatch {
-            id: disk.id.clone(),
-            status: Status::Idle,
-            idle_entered_at: Some(t1),
-            last_accessed_at: Some(t1),
-        });
+        disk.merge_passive_status_patch(
+            &disk.id.clone(),
+            &PassiveStatusPatch {
+                status: Status::Running,
+                idle_entered_at: None,
+                last_accessed_at: Some(t0),
+            },
+        );
+        disk.merge_passive_status_patch(
+            &disk.id.clone(),
+            &PassiveStatusPatch {
+                status: Status::Idle,
+                idle_entered_at: Some(t1),
+                last_accessed_at: Some(t1),
+            },
+        );
 
         assert_eq!(disk.status, Status::Idle);
         assert_eq!(disk.idle_entered_at, Some(t1));
