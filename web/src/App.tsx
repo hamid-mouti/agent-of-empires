@@ -72,6 +72,7 @@ import {
   fetchPlugins,
 } from "./lib/api";
 import type { DeleteSessionOptions, ServerAbout } from "./lib/api";
+import { getClientCapabilities } from "./lib/clientCapabilities";
 import { normalizeProjectPathKey } from "./lib/registeredProjects";
 import { IdleDecayWindowContext, parseIdleDecayWindowMs, useIdleDecayWindowMs } from "./lib/idleDecay";
 import { parseUnreadIndicatorEnabled, UnreadIndicatorContext, useUnreadIndicatorEnabled } from "./lib/unreadIndicator";
@@ -653,18 +654,26 @@ function AppContent({
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const keyboardProxyRef = useRef<HTMLTextAreaElement>(null);
 
+  const [serverAbout, setServerAbout] = useState<ServerAbout | null>(null);
+  // CityHall client mode collapses the dashboard to a locked-down end-user
+  // client; the capability flags gate the terminal/diff panes, project
+  // management, the wizard, and settings from one place. See #7.
+  const caps = useMemo(() => getClientCapabilities(serverAbout), [serverAbout]);
+
   const activeWorkspace = useMemo(() => {
     if (!activeSessionId) return undefined;
     return workspaces.find((w) => w.sessions.some((s) => s.id === activeSessionId));
   }, [workspaces, activeSessionId]);
   const activeSession = activeWorkspace?.sessions.find((s) => s.id === activeSessionId);
   const allPaneIds: string[] = [
-    "diff",
-    "terminal",
+    // CityHall client mode hides the diff and terminal panes (and plugin
+    // panes) so only the composer + structured view remain. See #7.
+    ...(caps.canUseDiff ? ["diff"] : []),
+    ...(caps.canUseTerminal ? ["terminal"] : []),
     // The background-agents panel only applies to structured-view (ACP)
     // sessions; a plain terminal session never launches sub-agents.
     ...(activeSession?.view === "structured" ? ["agents"] : []),
-    ...pluginPanes.map((p) => p.id),
+    ...(caps.cityhall ? [] : pluginPanes.map((p) => p.id)),
   ];
 
   // Fetch the diff when the panel is actually showing: on desktop when the
@@ -844,7 +853,6 @@ function AppContent({
   const [wizardPrefill, setWizardPrefill] = useState<WizardPrefill | undefined>(undefined);
   const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string | null>(null);
   const [stoppingWorkspaceId, setStoppingWorkspaceId] = useState<string | null>(null);
-  const [serverAbout, setServerAbout] = useState<ServerAbout | null>(null);
   // `serverAbout === null` conflates "not fetched yet" with "fetch failed", so
   // the tour gates auto-launch on an explicit loaded flag instead.
   const [serverAboutLoaded, setServerAboutLoaded] = useState(false);
@@ -1456,6 +1464,7 @@ function AppContent({
             setSearchParams(next, { replace: true });
           }}
           readOnly={serverAbout?.read_only}
+          themeOnly={!caps.canEditAdvancedSettings}
         />
       );
     }
@@ -1880,6 +1889,7 @@ function AppContent({
               onStopSession={handleStopSession}
               onStartSession={handleStartSession}
               readOnly={serverAbout?.read_only}
+              canManageProjects={caps.canManageProjects}
               sortMode={sidebarSortMode}
               onSortModeChange={selectSidebarSortMode}
               pluginSortRef={pluginSortRef}
@@ -1908,6 +1918,7 @@ function AppContent({
               setWizardPrefill(undefined);
             }}
             prefill={wizardPrefill}
+            nameOnly={caps.nameOnlyWizard}
           />
         )}
 
