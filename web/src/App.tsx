@@ -1488,6 +1488,7 @@ function AppContent({
           onCloneFromUrl={handleCloneFromUrl}
           onToggleSidebar={handleToggleSidebar}
           readOnly={serverAbout?.read_only}
+          canManageProjects={caps.canManageProjects}
         />
       );
     }
