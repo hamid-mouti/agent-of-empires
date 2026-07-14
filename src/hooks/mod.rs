@@ -695,6 +695,121 @@ pub(crate) fn install_codex_hooks_with_preserved_state(
     })
 }
 
+pub(crate) fn disable_gemini_folder_trust(settings_path: &Path) -> Result<()> {
+    with_config_lock(settings_path, "json.lock", || {
+        let mut settings: Value = if settings_path.exists() {
+            let content = std::fs::read_to_string(settings_path)?;
+            serde_json::from_str(&content).unwrap_or_else(|e| {
+                tracing::warn!(target: "hooks.install", "Failed to parse {} while disabling Gemini folder trust: {}", settings_path.display(), e);
+                serde_json::json!({})
+            })
+        } else {
+            serde_json::json!({})
+        };
+
+        let before = settings.clone();
+        if !settings.is_object() {
+            settings = serde_json::json!({});
+        }
+
+        let root = settings
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("Gemini settings root is not a JSON object"))?;
+        let security = root
+            .entry("security".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        if !security.is_object() {
+            *security = serde_json::json!({});
+        }
+
+        let security = security
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("Gemini security key is not a JSON object"))?;
+        let folder_trust = security
+            .entry("folderTrust".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        if !folder_trust.is_object() {
+            *folder_trust = serde_json::json!({});
+        }
+
+        folder_trust
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("Gemini folderTrust key is not a JSON object"))?
+            .insert("enabled".to_string(), Value::Bool(false));
+
+        if settings == before {
+            tracing::debug!(target: "hooks.install",
+                "Gemini folder trust in {} already disabled; skipping write",
+                settings_path.display());
+            return Ok(());
+        }
+
+        let formatted = serde_json::to_string_pretty(&settings)?;
+        crate::session::atomic_write_following_symlinks(settings_path, formatted.as_bytes())?;
+        tracing::info!(target: "hooks.install", "Disabled Gemini folder trust in {}", settings_path.display());
+        Ok(())
+    })
+}
+
+pub(crate) fn trust_codex_project(config_path: &Path, container_project_path: &str) -> Result<()> {
+    if !container_project_path.starts_with('/') {
+        anyhow::bail!(
+            "Codex trusted project path must be an absolute container path, got {}",
+            container_project_path
+        );
+    }
+
+    with_codex_config_lock(config_path, || {
+        let mut config = read_codex_config(config_path)?;
+        let before = config.to_string();
+
+        let root = config.as_table_mut();
+        if !root.contains_key("projects") {
+            root.insert("projects", toml_edit::Item::Table(toml_edit::Table::new()));
+        }
+
+        let projects_item = root
+            .get_mut("projects")
+            .ok_or_else(|| anyhow::anyhow!("Codex projects key was not created"))?;
+        if projects_item.as_table_like().is_none() {
+            *projects_item = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        let projects = projects_item
+            .as_table_like_mut()
+            .ok_or_else(|| anyhow::anyhow!("Codex projects key is not a TOML table"))?;
+        if !projects.contains_key(container_project_path) {
+            projects.insert(
+                container_project_path,
+                toml_edit::Item::Table(toml_edit::Table::new()),
+            );
+        }
+
+        let project_item = projects
+            .get_mut(container_project_path)
+            .ok_or_else(|| anyhow::anyhow!("Codex project trust table was not created"))?;
+        if project_item.as_table_like().is_none() {
+            *project_item = toml_edit::Item::Table(toml_edit::Table::new());
+        }
+
+        let project = project_item
+            .as_table_like_mut()
+            .ok_or_else(|| anyhow::anyhow!("Codex project trust entry is not a TOML table"))?;
+        project.insert("trust_level", toml_edit::value("trusted"));
+
+        if config.to_string() == before {
+            tracing::debug!(target: "hooks.install",
+                "Codex project trust in {} already up to date; skipping write",
+                config_path.display());
+            return Ok(());
+        }
+
+        write_codex_config(config_path, &config)?;
+        tracing::info!(target: "hooks.install", "Trusted Codex project {} in {}", container_project_path, config_path.display());
+        Ok(())
+    })
+}
+
 fn with_codex_config_lock<T>(config_path: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
     let lock_base_path = crate::session::resolve_symlink_chain(config_path)?;
     with_config_lock(&lock_base_path, "toml.lock", f)

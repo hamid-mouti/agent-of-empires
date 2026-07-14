@@ -1047,6 +1047,57 @@ fn refresh_codex_sandbox_hooks(mount: &AgentConfigMount, sandbox_dir: &Path) {
     }
 }
 
+fn apply_yolo_trust_config(
+    mount: &AgentConfigMount,
+    sandbox_dir: &Path,
+    container_workspace_path: &str,
+) -> Result<()> {
+    match (mount.tool_name, mount.host_rel) {
+        ("codex", ".codex") => crate::hooks::trust_codex_project(
+            &sandbox_dir.join("config.toml"),
+            container_workspace_path,
+        ),
+        ("gemini", ".gemini") => {
+            crate::hooks::disable_gemini_folder_trust(&sandbox_dir.join("settings.json"))
+        }
+        _ => Ok(()),
+    }
+}
+
+pub(crate) fn ensure_yolo_trust_config_for_active_agent(
+    tool: &str,
+    detect_as: Option<&str>,
+    profile: &str,
+    container_workspace_path: &str,
+) {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+
+    let resolved_profile = super::config::effective_profile(profile);
+    let session_config = super::profile_config::resolve_config_or_warn(&resolved_profile).session;
+    let active_agent = resolve_active_agent(tool, detect_as, &session_config);
+    let config_tool = active_agent.map_or(tool, |agent| agent.name);
+
+    for mount in AGENT_CONFIG_MOUNTS
+        .iter()
+        .filter(|m| m.tool_name == config_tool)
+    {
+        let sandbox_dir = home.join(mount.host_rel).join(SANDBOX_SUBDIR);
+        if let Err(e) = std::fs::create_dir_all(&sandbox_dir)
+            .with_context(|| format!("creating sandbox config dir {}", sandbox_dir.display()))
+            .and_then(|_| apply_yolo_trust_config(mount, &sandbox_dir, container_workspace_path))
+        {
+            tracing::warn!(target: "session.profile",
+                "Failed to apply sandbox YOLO trust config for {} at {}: {}",
+                mount.tool_name,
+                sandbox_dir.display(),
+                e
+            );
+        }
+    }
+}
+
 fn resolve_active_agent(
     tool: &str,
     detect_as: Option<&str>,
@@ -1453,6 +1504,16 @@ pub(crate) fn build_container_config(
             sandbox_dir.display(),
             container_path
         );
+        if is_yolo_mode {
+            if let Err(e) = apply_yolo_trust_config(mount, &sandbox_dir, &workspace_path) {
+                tracing::warn!(target: "session.profile",
+                    "Failed to apply sandbox YOLO trust config for {} at {}: {}",
+                    mount.tool_name,
+                    sandbox_dir.display(),
+                    e
+                );
+            }
+        }
         volumes.push(VolumeMount {
             host_path: sandbox_dir.to_string_lossy().to_string(),
             container_path,
@@ -3422,6 +3483,190 @@ extra_volumes = ["/host/screenshots:/root/screenshots"]
             "host (per-user) and container (fixed) paths MUST differ for the bind-mount remap"
         );
         crate::hooks::cleanup_hook_status_dir(instance_id);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_build_container_config_codex_yolo_trusts_container_workdir() {
+        let (_hg, _, _tmp_base) = BaseGuard::ready();
+        let temp_home = TempDir::new().unwrap();
+        std::env::set_var("HOME", temp_home.path());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        std::env::set_var("XDG_CONFIG_HOME", temp_home.path().join(".config"));
+
+        let codex_dir = temp_home.path().join(".codex");
+        let codex_sandbox = codex_dir.join(SANDBOX_SUBDIR);
+        fs::create_dir_all(&codex_sandbox).unwrap();
+        fs::write(codex_dir.join("config.toml"), r#"model = "gpt-5.3-codex""#).unwrap();
+        fs::write(
+            codex_sandbox.join("config.toml"),
+            r#"[hooks.state.trusted]
+enabled = true
+trusted_hash = "keep"
+"#,
+        )
+        .unwrap();
+
+        let project_dir = TempDir::new().unwrap();
+        git2::Repository::init(project_dir.path()).unwrap();
+
+        let sandbox_info = build_minimal_sandbox_info();
+        let instance_id = "codex-yolo-trust-test";
+        let config = build_container_config(
+            project_dir.path().to_str().unwrap(),
+            &sandbox_info,
+            ContainerAgentSelection::new("codex", None),
+            true,
+            instance_id,
+            None,
+            "",
+        )
+        .unwrap();
+
+        let config_path = codex_sandbox.join("config.toml");
+        let config_text = fs::read_to_string(&config_path).unwrap();
+        let parsed: toml::Value = toml::from_str(&config_text).unwrap();
+        assert_eq!(parsed["model"].as_str(), Some("gpt-5.3-codex"));
+        assert_eq!(
+            parsed["hooks"]["state"]["trusted"]["trusted_hash"].as_str(),
+            Some("keep")
+        );
+        assert_eq!(
+            parsed["projects"][config.working_dir.as_str()]["trust_level"].as_str(),
+            Some("trusted")
+        );
+        assert!(
+            codex_sandbox.join("hooks.json").exists(),
+            "Codex YOLO trust config must compose with sandbox hooks"
+        );
+        crate::hooks::cleanup_hook_status_dir(instance_id);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_build_container_config_gemini_yolo_disables_folder_trust_and_keeps_hooks() {
+        let (_hg, _, _tmp_base) = BaseGuard::ready();
+        let temp_home = TempDir::new().unwrap();
+        std::env::set_var("HOME", temp_home.path());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        std::env::set_var("XDG_CONFIG_HOME", temp_home.path().join(".config"));
+
+        let gemini_dir = temp_home.path().join(".gemini");
+        fs::create_dir_all(&gemini_dir).unwrap();
+        fs::write(
+            gemini_dir.join("settings.json"),
+            r#"{"theme":"dark","security":{"custom":true}}"#,
+        )
+        .unwrap();
+
+        let project_dir = TempDir::new().unwrap();
+        git2::Repository::init(project_dir.path()).unwrap();
+
+        let sandbox_info = build_minimal_sandbox_info();
+        let instance_id = "gemini-yolo-trust-test";
+        build_container_config(
+            project_dir.path().to_str().unwrap(),
+            &sandbox_info,
+            ContainerAgentSelection::new("gemini", None),
+            true,
+            instance_id,
+            None,
+            "",
+        )
+        .unwrap();
+
+        let settings_path = temp_home
+            .path()
+            .join(".gemini")
+            .join(SANDBOX_SUBDIR)
+            .join("settings.json");
+        let settings_text = fs::read_to_string(&settings_path).unwrap();
+        let settings: serde_json::Value = serde_json::from_str(&settings_text).unwrap();
+        assert_eq!(settings["theme"].as_str(), Some("dark"));
+        assert_eq!(settings["security"]["custom"].as_bool(), Some(true));
+        assert_eq!(
+            settings["security"]["folderTrust"]["enabled"].as_bool(),
+            Some(false)
+        );
+        assert!(settings["hooks"]["BeforeTool"].is_array());
+        assert!(settings_text.contains("aoe-hooks"));
+        crate::hooks::cleanup_hook_status_dir(instance_id);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_build_container_config_gemini_non_yolo_does_not_disable_folder_trust() {
+        let (_hg, _, _tmp_base) = BaseGuard::ready();
+        let temp_home = TempDir::new().unwrap();
+        std::env::set_var("HOME", temp_home.path());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        std::env::set_var("XDG_CONFIG_HOME", temp_home.path().join(".config"));
+
+        let project_dir = TempDir::new().unwrap();
+        git2::Repository::init(project_dir.path()).unwrap();
+
+        let sandbox_info = build_minimal_sandbox_info();
+        let instance_id = "gemini-non-yolo-trust-test";
+        build_container_config(
+            project_dir.path().to_str().unwrap(),
+            &sandbox_info,
+            ContainerAgentSelection::new("gemini", None),
+            false,
+            instance_id,
+            None,
+            "",
+        )
+        .unwrap();
+
+        let settings_path = temp_home
+            .path()
+            .join(".gemini")
+            .join(SANDBOX_SUBDIR)
+            .join("settings.json");
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+        assert!(settings["hooks"]["BeforeTool"].is_array());
+        assert!(settings["security"]["folderTrust"]["enabled"].is_null());
+        crate::hooks::cleanup_hook_status_dir(instance_id);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_ensure_yolo_trust_config_restores_gemini_after_refresh() {
+        let (_hg, _, _tmp_base) = BaseGuard::ready();
+        let temp_home = TempDir::new().unwrap();
+        std::env::set_var("HOME", temp_home.path());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        std::env::set_var("XDG_CONFIG_HOME", temp_home.path().join(".config"));
+
+        let gemini_dir = temp_home.path().join(".gemini");
+        let gemini_sandbox = gemini_dir.join(SANDBOX_SUBDIR);
+        fs::create_dir_all(&gemini_sandbox).unwrap();
+        fs::write(gemini_dir.join("settings.json"), r#"{"theme":"host"}"#).unwrap();
+        fs::write(
+            gemini_sandbox.join("settings.json"),
+            r#"{"security":{"folderTrust":{"enabled":false}}}"#,
+        )
+        .unwrap();
+
+        refresh_agent_configs();
+        let refreshed: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(gemini_sandbox.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(refreshed["theme"].as_str(), Some("host"));
+        assert!(refreshed["security"]["folderTrust"]["enabled"].is_null());
+
+        ensure_yolo_trust_config_for_active_agent("gemini", None, "", "/workspace/project");
+        let restored: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(gemini_sandbox.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(restored["theme"].as_str(), Some("host"));
+        assert_eq!(
+            restored["security"]["folderTrust"]["enabled"].as_bool(),
+            Some(false)
+        );
     }
 
     // Regression guard for the trap in #958: a sidecar agent (settl TOML,

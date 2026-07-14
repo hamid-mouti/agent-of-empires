@@ -3131,6 +3131,14 @@ impl Instance {
             self.ensure_before_start_env(false)?;
             container_config::refresh_agent_configs();
             self.backfill_container_workdir(&container);
+            if self.is_yolo_mode() {
+                container_config::ensure_yolo_trust_config_for_active_agent(
+                    &self.tool,
+                    Some(&self.detect_as),
+                    &self.source_profile,
+                    &self.container_workdir(),
+                );
+            }
             return Ok(container);
         }
 
@@ -3139,8 +3147,16 @@ impl Instance {
             // short-lived token is re-minted.
             self.ensure_before_start_env(true)?;
             container_config::refresh_agent_configs();
-            container.start()?;
             self.backfill_container_workdir(&container);
+            if self.is_yolo_mode() {
+                container_config::ensure_yolo_trust_config_for_active_agent(
+                    &self.tool,
+                    Some(&self.detect_as),
+                    &self.source_profile,
+                    &self.container_workdir(),
+                );
+            }
+            container.start()?;
             return Ok(container);
         }
 
