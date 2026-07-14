@@ -1464,7 +1464,7 @@ function AppContent({
             setSearchParams(next, { replace: true });
           }}
           readOnly={serverAbout?.read_only}
-          themeOnly={!caps.canEditAdvancedSettings}
+          cityhall={caps.cityhall}
         />
       );
     }
