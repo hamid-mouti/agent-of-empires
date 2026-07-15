@@ -1779,6 +1779,7 @@ pub fn uninstall_all_hooks() {
 mod tests {
     use super::targets::collect_env_lists_from_session;
     use super::*;
+    use crate::session::test_support::EnvGuard;
     use tempfile::TempDir;
 
     fn claude_events() -> Vec<crate::agents::ResolvedHookEvent> {
@@ -1822,29 +1823,6 @@ mod tests {
             .events
     }
 
-    struct CodexHomeGuard(Option<String>);
-    impl CodexHomeGuard {
-        fn set(path: &Path) -> Self {
-            let prev = std::env::var("CODEX_HOME").ok();
-            std::env::set_var("CODEX_HOME", path);
-            Self(prev)
-        }
-
-        fn unset() -> Self {
-            let prev = std::env::var("CODEX_HOME").ok();
-            std::env::remove_var("CODEX_HOME");
-            Self(prev)
-        }
-    }
-    impl Drop for CodexHomeGuard {
-        fn drop(&mut self) {
-            match &self.0 {
-                Some(v) => std::env::set_var("CODEX_HOME", v),
-                None => std::env::remove_var("CODEX_HOME"),
-            }
-        }
-    }
-
     fn claude_hook_config() -> &'static crate::agents::AgentHookConfig {
         crate::agents::get_agent("claude")
             .unwrap()
@@ -1853,36 +1831,10 @@ mod tests {
             .unwrap()
     }
 
-    struct EnvGuard {
-        key: &'static str,
-        prev: Option<String>,
-    }
-    impl EnvGuard {
-        fn set(key: &'static str, value: &str) -> Self {
-            let prev = std::env::var(key).ok();
-            std::env::set_var(key, value);
-            Self { key, prev }
-        }
-
-        fn unset(key: &'static str) -> Self {
-            let prev = std::env::var(key).ok();
-            std::env::remove_var(key);
-            Self { key, prev }
-        }
-    }
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            match &self.prev {
-                Some(v) => std::env::set_var(self.key, v),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
-
     #[test]
     #[serial_test::serial(shell_env)]
     fn test_agent_settings_path_defaults_to_home_relative() {
-        let _guard = EnvGuard::unset("CLAUDE_CONFIG_DIR");
+        let _guard = EnvGuard::unset(&["CLAUDE_CONFIG_DIR"]);
         let path = agent_settings_path_for_host_environment(claude_hook_config(), &[]).unwrap();
         let expected = dirs::home_dir().unwrap().join(".claude/settings.json");
         assert_eq!(path, expected);
@@ -1891,7 +1843,7 @@ mod tests {
     #[test]
     #[serial_test::serial(shell_env)]
     fn test_agent_settings_path_honors_host_env_override() {
-        let _guard = EnvGuard::unset("CLAUDE_CONFIG_DIR");
+        let _guard = EnvGuard::unset(&["CLAUDE_CONFIG_DIR"]);
         let host_env = vec!["CLAUDE_CONFIG_DIR=/home/me/.claude-work".to_string()];
         let path =
             agent_settings_path_for_host_environment(claude_hook_config(), &host_env).unwrap();
@@ -1904,7 +1856,7 @@ mod tests {
     #[serial_test::serial(shell_env)]
     fn test_agent_settings_path_host_env_takes_precedence_over_process_env() {
         // When both are set, the session's profile env wins over AoE's own env.
-        let _guard = EnvGuard::set("CLAUDE_CONFIG_DIR", "/from/process/env");
+        let _guard = EnvGuard::set(&[("CLAUDE_CONFIG_DIR", "/from/process/env")]);
         let host_env = vec!["CLAUDE_CONFIG_DIR=/from/host/env".to_string()];
         let path =
             agent_settings_path_for_host_environment(claude_hook_config(), &host_env).unwrap();
@@ -1916,7 +1868,7 @@ mod tests {
     fn test_agent_settings_path_falls_back_to_process_env() {
         // Not present in the host env list at all, but set in AoE's own env:
         // the launched agent inherits it, so hooks must follow.
-        let _guard = EnvGuard::set("CLAUDE_CONFIG_DIR", "/tmp/claude-proc");
+        let _guard = EnvGuard::set(&[("CLAUDE_CONFIG_DIR", "/tmp/claude-proc")]);
         let path = agent_settings_path_for_host_environment(claude_hook_config(), &[]).unwrap();
         assert_eq!(path, PathBuf::from("/tmp/claude-proc/settings.json"));
     }
@@ -1924,7 +1876,7 @@ mod tests {
     #[test]
     #[serial_test::serial(shell_env)]
     fn test_agent_settings_path_display_matches_resolution() {
-        let _guard = EnvGuard::unset("CLAUDE_CONFIG_DIR");
+        let _guard = EnvGuard::unset(&["CLAUDE_CONFIG_DIR"]);
 
         // Default: tilde-relative, matching how the path is shown elsewhere.
         assert_eq!(
@@ -1943,7 +1895,7 @@ mod tests {
     #[test]
     #[serial_test::serial(shell_env)]
     fn test_agent_settings_path_empty_override_is_ignored() {
-        let _guard = EnvGuard::unset("CLAUDE_CONFIG_DIR");
+        let _guard = EnvGuard::unset(&["CLAUDE_CONFIG_DIR"]);
         let host_env = vec!["CLAUDE_CONFIG_DIR=".to_string()];
         let path =
             agent_settings_path_for_host_environment(claude_hook_config(), &host_env).unwrap();
@@ -2302,7 +2254,7 @@ mod tests {
     #[serial_test::serial]
     fn test_codex_config_path_respects_codex_home() {
         let tmp = TempDir::new().unwrap();
-        let _guard = CodexHomeGuard::set(tmp.path());
+        let _guard = EnvGuard::set(&[("CODEX_HOME", tmp.path())]);
 
         assert_eq!(codex_config_path().unwrap(), tmp.path().join("config.toml"));
         assert_eq!(
@@ -2315,7 +2267,7 @@ mod tests {
     #[serial_test::serial]
     fn test_codex_config_path_for_host_environment_ignores_empty_codex_home() {
         let tmp = TempDir::new().unwrap();
-        let _guard = CodexHomeGuard::unset();
+        let _guard = EnvGuard::unset(&["CODEX_HOME"]);
         std::env::set_var("HOME", tmp.path());
 
         // An empty `CODEX_HOME=` must not resolve to a bare relative
@@ -2339,7 +2291,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         // An empty `CODEX_HOME` in AoE's own process env must fall back to the
         // home-relative default rather than a bare relative `config.toml`.
-        let _guard = CodexHomeGuard::set(Path::new(""));
+        let _guard = EnvGuard::set(&[("CODEX_HOME", Path::new(""))]);
         std::env::set_var("HOME", tmp.path());
 
         let path = codex_config_path().unwrap();
@@ -2354,7 +2306,7 @@ mod tests {
     #[serial_test::serial]
     fn test_iter_hook_targets_includes_profile_codex_home() {
         let tmp = TempDir::new().unwrap();
-        let _guard = CodexHomeGuard::unset();
+        let _guard = EnvGuard::unset(&["CODEX_HOME"]);
         std::env::set_var("HOME", tmp.path());
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         std::env::set_var("XDG_CONFIG_HOME", tmp.path().join(".config"));
@@ -4565,13 +4517,10 @@ hooks_auto_accept: false
     #[serial_test::serial(shell_env)]
     fn collect_env_lists_warns_on_corrupt_global_config_but_not_on_missing() {
         let tmp = TempDir::new().unwrap();
-        let _codex = CodexHomeGuard::unset();
-        let _home = EnvGuard::set("HOME", tmp.path().to_str().unwrap());
+        let _codex = EnvGuard::unset(&["CODEX_HOME"]);
+        let _home = EnvGuard::set(&[("HOME", tmp.path())]);
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        let _xdg = EnvGuard::set(
-            "XDG_CONFIG_HOME",
-            tmp.path().join(".config").to_str().unwrap(),
-        );
+        let _xdg = EnvGuard::set(&[("XDG_CONFIG_HOME", tmp.path().join(".config"))]);
 
         let app_dir = crate::session::get_app_dir().unwrap();
         let config_path = app_dir.join("config.toml");
