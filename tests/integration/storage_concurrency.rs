@@ -520,6 +520,7 @@ fn test_cross_process_independent_profiles_do_not_serialise() -> Result<()> {
     // Debug CLI startup can exceed 500ms on loaded builders. Keep the hold
     // long enough that startup overhead does not masquerade as lock contention.
     let hold = std::time::Duration::from_secs(3);
+    let independent_startup_budget = std::time::Duration::from_millis(2500);
     let storage_clone = Storage::new_unwatched("profile-a")?;
     let parent_held = Arc::new(Barrier::new(2));
     let parent_held_inner = parent_held.clone();
@@ -553,10 +554,10 @@ fn test_cross_process_independent_profiles_do_not_serialise() -> Result<()> {
     parent_handle.join().unwrap();
     assert!(status.success(), "profile-b favorite failed: {status:?}");
     assert!(
-        elapsed < hold,
+        elapsed < independent_startup_budget,
         "profile-b must not block on profile-a's flock; observed {:?} >= {:?}",
         elapsed,
-        hold
+        independent_startup_budget
     );
     let _ = id_a;
     Ok(())
