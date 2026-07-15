@@ -4,6 +4,70 @@ All notable changes to Agent of Empires will be documented in this file.
 
 The format follows [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [1.12.2](https://github.com/agent-of-empires/agent-of-empires/releases/tag/v1.12.2) - 2026-07-15
+
+
+
+### Bug Fixes
+
+- **containers:** Promote does_container_exist to caller-driven tri-state (closes #2654) in [#2719](https://github.com/agent-of-empires/agent-of-empires/pull/2719) by [@jerome-benoit](https://github.com/jerome-benoit) ([`21ad248`](https://github.com/agent-of-empires/agent-of-empires/commit/21ad2481ee470c36a4c622c66894bf1d8d6735a9))
+- **session:** Eliminate spurious restamp seed and IdleField ambiguity (#2697 review) in [#2729](https://github.com/agent-of-empires/agent-of-empires/pull/2729) by [@jerome-benoit](https://github.com/jerome-benoit) ([`334f50c`](https://github.com/agent-of-empires/agent-of-empires/commit/334f50c20592403fad2bde68aed60d5cd0608328))
+- **acp:** Persist model pick so respawn keeps it in [#2771](https://github.com/agent-of-empires/agent-of-empires/pull/2771) by [@Seluj78](https://github.com/Seluj78) ([`441b283`](https://github.com/agent-of-empires/agent-of-empires/commit/441b2832c29517636ab37db9af9420001f1cc191))
+- **acp:** Latch context-window size so the composer stops flickering 200k to 1M in [#2774](https://github.com/agent-of-empires/agent-of-empires/pull/2774) by [@Seluj78](https://github.com/Seluj78) ([`627ee92`](https://github.com/agent-of-empires/agent-of-empires/commit/627ee9290432f7ebf0185ec8647685933fbe40db))
+- **acp:** Send client_info in initialize request to satisfy strict agent backends in [#2770](https://github.com/agent-of-empires/agent-of-empires/pull/2770) by [@Seluj78](https://github.com/Seluj78) ([`c3328cd`](https://github.com/agent-of-empires/agent-of-empires/commit/c3328cd95a7af47e2dacec6cf05f85c728350d37))
+- **plugin:** Recover and observe stopped plugin workers without a daemon restart in [#2773](https://github.com/agent-of-empires/agent-of-empires/pull/2773) by [@Seluj78](https://github.com/Seluj78) ([`119570f`](https://github.com/agent-of-empires/agent-of-empires/commit/119570f7c6694a513eff3a135f2ea4036356d390))
+- **serve:** Stop the live-session pane re-assert loop that flickers the cursor (#2766) in [#2772](https://github.com/agent-of-empires/agent-of-empires/pull/2772) by [@Seluj78](https://github.com/Seluj78) ([`188b09d`](https://github.com/agent-of-empires/agent-of-empires/commit/188b09d97e9cf93d502d583c1c93672d9a0cba7f))
+- **tui:** Make w skip snoozed sessions when jumping to next attention in [#2750](https://github.com/agent-of-empires/agent-of-empires/pull/2750) by [@athal7](https://github.com/athal7) ([`6267148`](https://github.com/agent-of-empires/agent-of-empires/commit/6267148cfe43f713561239e84e727fb4b344faef))
+- **web:** Align live terminal enter chords in [#2765](https://github.com/agent-of-empires/agent-of-empires/pull/2765) by [@SYU8384](https://github.com/SYU8384) ([`24129a5`](https://github.com/agent-of-empires/agent-of-empires/commit/24129a5ae4c76f5182601d2c472c74b9b6484c7f))
+- **config:** Follow symlinks when saving the global config in [#2785](https://github.com/agent-of-empires/agent-of-empires/pull/2785) by [@Seluj78](https://github.com/Seluj78) ([`66a0de9`](https://github.com/agent-of-empires/agent-of-empires/commit/66a0de9402966e337274770f3a26393a9b83b976))
+- **tui:** Render structured tool paths repo-relative in [#2797](https://github.com/agent-of-empires/agent-of-empires/pull/2797) by [@Seluj78](https://github.com/Seluj78) ([`f7640fc`](https://github.com/agent-of-empires/agent-of-empires/commit/f7640fc12c07344c2839a8e7f01f87180918fd7e))
+- **acp:** Warn about stale adapters on serve startup in [#2799](https://github.com/agent-of-empires/agent-of-empires/pull/2799) by [@Seluj78](https://github.com/Seluj78) ([`06276b7`](https://github.com/agent-of-empires/agent-of-empires/commit/06276b7cea9288b24fae2e1d551b06cb73f190fa))
+- **acp:** Anchor tool-group card id to first child so it stops re-folding in [#2807](https://github.com/agent-of-empires/agent-of-empires/pull/2807) by [@Seluj78](https://github.com/Seluj78) ([`f5320a9`](https://github.com/agent-of-empires/agent-of-empires/commit/f5320a9cad1107983ca5a8d8829e7c87ea73c949))
+- **acp:** Honor structured-view acp_defaults (model + effort) on aoe add and reconciler respawns in [#2809](https://github.com/agent-of-empires/agent-of-empires/pull/2809) by [@Seluj78](https://github.com/Seluj78) ([`dfa1f4a`](https://github.com/agent-of-empires/agent-of-empires/commit/dfa1f4a87ec2a90d502d5ac13195cf3431a7518d))
+- **web:** Gray out current agent in switch-agent modal in [#2810](https://github.com/agent-of-empires/agent-of-empires/pull/2810) by [@Seluj78](https://github.com/Seluj78) ([`9e204c7`](https://github.com/agent-of-empires/agent-of-empires/commit/9e204c7fa440ef3e2c826f5a3d126dd243fbdf4b))
+- **session:** Launch empty Claude threads fresh-pinned instead of a doomed --resume in [#2700](https://github.com/agent-of-empires/agent-of-empires/pull/2700) by [@Eric162](https://github.com/Eric162) ([`b882260`](https://github.com/agent-of-empires/agent-of-empires/commit/b882260284cd363d1e9694540b5925cb80eb33cd))
+- **acp:** Treat CapacityFull as a first-class transient (refund budget, retry, no orphan) (#1027) in [#2782](https://github.com/agent-of-empires/agent-of-empires/pull/2782) by [@jerome-benoit](https://github.com/jerome-benoit) ([`7580fe3`](https://github.com/agent-of-empires/agent-of-empires/commit/7580fe399936657a3f798dd4c755adde8a070415))
+- **test:** Stop home-isolation helpers leaking XDG config in [#2786](https://github.com/agent-of-empires/agent-of-empires/pull/2786) by [@athal7](https://github.com/athal7) ([`2a7865d`](https://github.com/agent-of-empires/agent-of-empires/commit/2a7865d5bb0e662729d83b92d19be06b49ab9a38))
+- **tui:** Stop Copilot session spinner spinning after the turn ends in [#2816](https://github.com/agent-of-empires/agent-of-empires/pull/2816) by [@Seluj78](https://github.com/Seluj78) ([`855a009`](https://github.com/agent-of-empires/agent-of-empires/commit/855a009b2a75a1b903e6703c2d0e60d9c5fa59f9))
+- **web:** End the first-run tour on dismiss instead of stranding the scrim in [#2820](https://github.com/agent-of-empires/agent-of-empires/pull/2820) by [@Seluj78](https://github.com/Seluj78) ([`e8f55ef`](https://github.com/agent-of-empires/agent-of-empires/commit/e8f55ef974bdcaa276cdc9411bd011d6c6ef6a7c))
+- Retain bounded live terminal scrollback in [#2813](https://github.com/agent-of-empires/agent-of-empires/pull/2813) by [@SYU8384](https://github.com/SYU8384) ([`51b3566`](https://github.com/agent-of-empires/agent-of-empires/commit/51b35669c13ede3daec84a2269b85fc925135e55))
+- **session:** Durable cross-process purge claim to close the purge/restore race (#2541) in [#2780](https://github.com/agent-of-empires/agent-of-empires/pull/2780) by [@jerome-benoit](https://github.com/jerome-benoit) ([`1c8d94f`](https://github.com/agent-of-empires/agent-of-empires/commit/1c8d94f2b773506a60cdf4881d8bf2241a76bf29))
+- **web:** Prevent live terminal bottom-scroll blackout in [#2776](https://github.com/agent-of-empires/agent-of-empires/pull/2776) by [@SYU8384](https://github.com/SYU8384) ([`03d1560`](https://github.com/agent-of-empires/agent-of-empires/commit/03d1560932767390db55e0ef62bbea83be53781f))
+- **web:** Insert soft newline on Shift+Enter in live terminal in [#2823](https://github.com/agent-of-empires/agent-of-empires/pull/2823) by [@njbrake](https://github.com/njbrake) ([`996f52c`](https://github.com/agent-of-empires/agent-of-empires/commit/996f52cde4fd0aa8aa0e053d62671c1e6af2f1a7))
+- **tui:** Skip pre-draw cursor hide during live-send to stop flicker in [#2825](https://github.com/agent-of-empires/agent-of-empires/pull/2825) by [@athal7](https://github.com/athal7) ([`38547b0`](https://github.com/agent-of-empires/agent-of-empires/commit/38547b076bf653e4de1e99ba6792b4187d5713e9))
+- **tui:** Keep the live preview from desyncing by a row in [#2830](https://github.com/agent-of-empires/agent-of-empires/pull/2830) by [@njbrake](https://github.com/njbrake) ([`5826e0f`](https://github.com/agent-of-empires/agent-of-empires/commit/5826e0fd33fbecdf16c54e1f0ee0c67bdbe83397))
+- **web:** Present multi-session deletes as workspace actions in [#2827](https://github.com/agent-of-empires/agent-of-empires/pull/2827) by [@Seluj78](https://github.com/Seluj78) ([`9796de0`](https://github.com/agent-of-empires/agent-of-empires/commit/9796de059d125f9c323b7591444956a000d524d0))
+- **web:** Preserve right dock tabs on collapse in [#2829](https://github.com/agent-of-empires/agent-of-empires/pull/2829) by [@Seluj78](https://github.com/Seluj78) ([`3f0ee18`](https://github.com/agent-of-empires/agent-of-empires/commit/3f0ee180371796cc47e96ecdd4195fc687f73662))
+
+
+### Features
+
+- Add composer action extension point in [#2585](https://github.com/agent-of-empires/agent-of-empires/pull/2585) by [@amanzainal](https://github.com/amanzainal) ([`8f21510`](https://github.com/agent-of-empires/agent-of-empires/commit/8f215108ffe1e57989e53cce671f4c7f7f6512b3))
+- **web:** Explain composer usage/cost indicator with a hover tooltip in [#2806](https://github.com/agent-of-empires/agent-of-empires/pull/2806) by [@Seluj78](https://github.com/Seluj78) ([`02350c2`](https://github.com/agent-of-empires/agent-of-empires/commit/02350c242a94d7207486b0f2ab48ea6679833fa9))
+- **serve:** Use full first-turn context for smart rename and add opt-in prompt-start timing in [#2811](https://github.com/agent-of-empires/agent-of-empires/pull/2811) by [@Seluj78](https://github.com/Seluj78) ([`49fdc1f`](https://github.com/agent-of-empires/agent-of-empires/commit/49fdc1f7d59657322fa36338ba30cbe651781ab0))
+- **tui:** Auto-enter live-send on view switch, support Tool view in [#2777](https://github.com/agent-of-empires/agent-of-empires/pull/2777) by [@athal7](https://github.com/athal7) ([`8fcfd2c`](https://github.com/agent-of-empires/agent-of-empires/commit/8fcfd2c00b5fc8b98d447c6578fbddab257c3f25))
+- Respond to agent permission prompts from the sidebar in [#2764](https://github.com/agent-of-empires/agent-of-empires/pull/2764) by [@athal7](https://github.com/athal7) ([`77dc53f`](https://github.com/agent-of-empires/agent-of-empires/commit/77dc53f430fa209de7985a0ec46dc27a352b538b))
+- **acp:** Agent-agnostic conversation summary for structured sessions in [#2814](https://github.com/agent-of-empires/agent-of-empires/pull/2814) by [@Seluj78](https://github.com/Seluj78) ([`b243243`](https://github.com/agent-of-empires/agent-of-empires/commit/b243243ad8490fc9671ce4e3e3f46381637168bd))
+- Add sandbox.network config for container network isolation in [#2824](https://github.com/agent-of-empires/agent-of-empires/pull/2824) by [@njbrake](https://github.com/njbrake) ([`d9fa418`](https://github.com/agent-of-empires/agent-of-empires/commit/d9fa41886a0ffbc65c48e12591dfe38c960a4035))
+
+
+### Other
+
+- Remove support for x86_64-darwin in [#2778](https://github.com/agent-of-empires/agent-of-empires/pull/2778) by [@neunenak](https://github.com/neunenak) ([`fed711b`](https://github.com/agent-of-empires/agent-of-empires/commit/fed711b4da6a900dab3df71e9c3b385a9f432f3f))
+
+
+### Performance
+
+- **tui:** Cut live-mode input and echo latency to near-attach in [#2822](https://github.com/agent-of-empires/agent-of-empires/pull/2822) by [@njbrake](https://github.com/njbrake) ([`7f46fcf`](https://github.com/agent-of-empires/agent-of-empires/commit/7f46fcf884206057816b1ad84a3fc5f9a3d8fdcd))
+
+
+
+### New Contributors
+
+- [@athal7](https://github.com/athal7) made their first contribution in [#2825](https://github.com/agent-of-empires/agent-of-empires/pull/2825)
+- [@chen-jiying](https://github.com/chen-jiying) made their first contribution in [#2779](https://github.com/agent-of-empires/agent-of-empires/pull/2779)
+
+**Full Changelog**: https://github.com/agent-of-empires/agent-of-empires/compare/v1.12.1...v1.12.2
 ## [1.12.1](https://github.com/agent-of-empires/agent-of-empires/releases/tag/v1.12.1) - 2026-07-08
 
 
